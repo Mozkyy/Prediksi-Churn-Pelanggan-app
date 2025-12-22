@@ -8,7 +8,7 @@ import seaborn as sns
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Telco Churn Prediction App",
-    page_icon="📞",
+    page_icon="",
     layout="wide"
 )
 
