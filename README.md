@@ -17,3 +17,5 @@ A simple Streamlit app template for you to modify!
    ```
    $ streamlit run streamlit_app.py
    ```
+Streamlit App:
+https://prediksi-churn-pelanggan.streamlit.app/
