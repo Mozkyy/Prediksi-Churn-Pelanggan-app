@@ -340,16 +340,6 @@ try:
             st.info("ℹ️ Kontrak 1 tahun memiliki risiko churn sedang.")
         else:
             st.success("✅ Kontrak 2 tahun memiliki risiko churn paling rendah!")
-        
-        # Payment Method Analysis
-        st.markdown("**💳 Analisis Payment Method**")
-        payment = input_df['PaymentMethod'].iloc[0]
-        st.info(f"**Metode:** {payment}")
-        
-        if payment == "Electronic check":
-            st.warning("⚠️ Electronic check memiliki korelasi tinggi dengan churn.")
-        else:
-            st.success("✅ Metode pembayaran ini cenderung lebih stabil.")
 
     with viz_col3:
         # Tenure Analysis
@@ -433,7 +423,7 @@ except Exception as e:
     st.error("❌ Terjadi error saat melakukan prediksi!")
     st.error(f"**Error:** {str(e)}")
     
-    with st.expander(" Debug Information"):
+    with st.expander("🐛 Debug Information"):
         st.write("**Input DataFrame:**")
         st.dataframe(input_df)
         
