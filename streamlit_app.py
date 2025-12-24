@@ -128,13 +128,6 @@ def get_user_input():
     # Paperless Billing
     paperless_billing_options = get_valid_options(encoders, 'PaperlessBilling')
     paperless_billing = st.sidebar.selectbox("Paperless Billing", paperless_billing_options if paperless_billing_options else ["Yes", "No"])
-    
-    # Payment Method
-    payment_method_options = get_valid_options(encoders, 'PaymentMethod')
-    payment_method = st.sidebar.selectbox(
-        "Payment Method", 
-        payment_method_options if payment_method_options else ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"]
-    )
 
     data = {
         'gender': gender,
