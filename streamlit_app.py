@@ -128,6 +128,13 @@ def get_user_input():
     # Paperless Billing
     paperless_billing_options = get_valid_options(encoders, 'PaperlessBilling')
     paperless_billing = st.sidebar.selectbox("Paperless Billing", paperless_billing_options if paperless_billing_options else ["Yes", "No"])
+    
+    # Payment Method
+    payment_method_options = get_valid_options(encoders, 'PaymentMethod')
+    payment_method = st.sidebar.selectbox(
+        "Payment Method", 
+        payment_method_options if payment_method_options else ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"]
+    )
 
     data = {
         'gender': gender,
@@ -381,7 +388,7 @@ try:
     insight_col1, insight_col2 = st.columns(2)
     
     with insight_col1:
-        st.markdown("** Faktor Risiko Terdeteksi:**")
+        st.markdown("**🔍 Faktor Risiko Terdeteksi:**")
         risk_factors = []
         
         if input_df['Contract'].iloc[0] == "Month-to-month":
@@ -402,7 +409,7 @@ try:
             st.success("✅ Tidak ada faktor risiko mayor terdeteksi")
     
     with insight_col2:
-        st.markdown("** Faktor Protektif Terdeteksi:**")
+        st.markdown("**💪 Faktor Protektif Terdeteksi:**")
         protective_factors = []
         
         if input_df['Contract'].iloc[0] in ["One year", "Two year"]:
