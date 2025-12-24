@@ -15,8 +15,8 @@ st.set_page_config(
 # --- LOAD MODEL & ASSETS ---
 @st.cache_resource
 def load_model():
-    # Memuat file pkl yang berisi model dan preprocessing
-    return joblib.load('churn_model_assets.pkl')
+    # Memuat file pkl yang berisi model terbaik
+    return joblib.load('streamlit_model_balanced.pkl')
 
 try:
     assets = load_model()
@@ -25,7 +25,7 @@ try:
     encoders = assets['label_encoders']
     feature_names = assets['feature_names']
 except Exception as e:
-    st.error(f"Gagal memuat model. Pastikan file 'churn_model_assets.pkl' ada di folder yang sama. Error: {e}")
+    st.error(f"Gagal memuat model. Pastikan file 'streamlit_model_balanced.pkl' ada di folder yang sama. Error: {e}")
     st.stop()
 
 # --- SIDEBAR: INPUT USER ---
