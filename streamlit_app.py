@@ -8,40 +8,50 @@ import seaborn as sns
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Telco Churn Prediction App",
-    page_icon="📱",
+    page_icon="📊",
     layout="wide"
 )
 
 # --- LOAD MODEL & ASSETS ---
 @st.cache_resource
 def load_model():
-    # Memuat file pkl yang berisi model terbaik
-    return joblib.load('streamlit_model_balanced.pkl')
+    """Memuat model dan assets dari file pkl"""
+    try:
+        assets = joblib.load('streamlit_model_balanced.pkl')
+        return assets
+    except FileNotFoundError:
+        st.error("❌ File 'streamlit_model_balanced.pkl' tidak ditemukan!")
+        st.info("Pastikan file berada di folder yang sama dengan streamlit_app.py")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Gagal memuat model: {str(e)}")
+        st.stop()
 
-try:
-    assets = load_model()
-    model = assets['model']
-    scaler = assets['scaler']
-    encoders = assets['label_encoders']
-    feature_names = assets['feature_names']
-except Exception as e:
-    st.error(f"Gagal memuat model. Pastikan file 'streamlit_model_balanced.pkl' ada di folder yang sama. Error: {e}")
-    st.stop()
+# Load assets
+assets = load_model()
+model = assets['model']
+scaler = assets.get('scaler')
+encoders = assets['label_encoders']
+feature_names = assets['feature_names']
+model_info = assets.get('model_info', {})
+class_weight_info = assets.get('class_weight_info', {})
 
 # --- SIDEBAR: INPUT USER ---
 st.sidebar.header("📝 Input Data Pelanggan")
+st.sidebar.markdown("Masukkan informasi pelanggan untuk prediksi churn")
 
 def get_user_input():
-    # Fitur Numerik
-    tenure = st.sidebar.slider("Tenure (Bulan)", 0, 72, 12)
-    monthly_charges = st.sidebar.number_input("Monthly Charges ($)", 0.0, 150.0, 70.0)
-    total_charges = st.sidebar.number_input("Total Charges ($)", 0.0, 10000.0, 800.0)
-    senior_citizen = st.sidebar.selectbox("Senior Citizen (0=No, 1=Yes)", [0, 1])
-
-    # Fitur Kategorikal
+    """Fungsi untuk mengambil input dari user"""
+    
+    st.sidebar.subheader("👤 Demografi")
+    
     gender = st.sidebar.selectbox("Gender", ["Male", "Female"])
+    senior_citizen = st.sidebar.selectbox("Senior Citizen", [0, 1], format_func=lambda x: "Ya (65+)" if x == 1 else "Tidak")
     partner = st.sidebar.selectbox("Partner", ["Yes", "No"])
     dependents = st.sidebar.selectbox("Dependents", ["Yes", "No"])
+    
+    st.sidebar.subheader("📞 Layanan")
+    
     phone_service = st.sidebar.selectbox("Phone Service", ["Yes", "No"])
     multiple_lines = st.sidebar.selectbox("Multiple Lines", ["No phone service", "No", "Yes"])
     internet_service = st.sidebar.selectbox("Internet Service", ["DSL", "Fiber optic", "No"])
@@ -51,183 +61,321 @@ def get_user_input():
     tech_support = st.sidebar.selectbox("Tech Support", ["No", "Yes", "No internet service"])
     streaming_tv = st.sidebar.selectbox("Streaming TV", ["No", "Yes", "No internet service"])
     streaming_movies = st.sidebar.selectbox("Streaming Movies", ["No", "Yes", "No internet service"])
+    
+    st.sidebar.subheader("💳 Akun & Billing")
+    
+    tenure = st.sidebar.slider("Tenure (Bulan)", 0, 72, 12, help="Lama berlangganan dalam bulan")
+    monthly_charges = st.sidebar.number_input("Monthly Charges ($)", 0.0, 150.0, 70.0, step=0.5, help="Biaya bulanan")
+    total_charges = st.sidebar.number_input("Total Charges ($)", 0.0, 10000.0, 800.0, step=1.0, help="Total biaya keseluruhan")
+    
     contract = st.sidebar.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
     paperless_billing = st.sidebar.selectbox("Paperless Billing", ["Yes", "No"])
-    payment_method = st.sidebar.selectbox("Payment Method", 
-                                        ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"])
+    payment_method = st.sidebar.selectbox(
+        "Payment Method", 
+        ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"]
+    )
 
     data = {
-        'gender': gender, 'SeniorCitizen': senior_citizen, 'Partner': partner,
-        'Dependents': dependents, 'tenure': tenure, 'PhoneService': phone_service,
-        'MultipleLines': multiple_lines, 'InternetService': internet_service,
-        'OnlineSecurity': online_security, 'OnlineBackup': online_backup,
-        'DeviceProtection': device_protection, 'TechSupport': tech_support,
-        'StreamingTV': streaming_tv, 'StreamingMovies': streaming_movies,
-        'Contract': contract, 'PaperlessBilling': paperless_billing,
-        'PaymentMethod': payment_method, 'MonthlyCharges': monthly_charges,
+        'gender': gender,
+        'SeniorCitizen': senior_citizen,
+        'Partner': partner,
+        'Dependents': dependents,
+        'tenure': tenure,
+        'PhoneService': phone_service,
+        'MultipleLines': multiple_lines,
+        'InternetService': internet_service,
+        'OnlineSecurity': online_security,
+        'OnlineBackup': online_backup,
+        'DeviceProtection': device_protection,
+        'TechSupport': tech_support,
+        'StreamingTV': streaming_tv,
+        'StreamingMovies': streaming_movies,
+        'Contract': contract,
+        'PaperlessBilling': paperless_billing,
+        'PaymentMethod': payment_method,
+        'MonthlyCharges': monthly_charges,
         'TotalCharges': total_charges
     }
     return pd.DataFrame([data])
 
+# Get user input
 input_df = get_user_input()
 
 # --- MAIN PAGE ---
 st.title("📊 Telco Customer Churn Predictor")
-st.markdown("Aplikasi ini menggunakan model **Machine Learning** terbaik untuk memprediksi potensi pelanggan berhenti berlangganan.")
+st.markdown("Aplikasi ini menggunakan model **Machine Learning** dengan class_weight='balanced' untuk memprediksi potensi pelanggan berhenti berlangganan.")
+
+# Display model info
+if model_info:
+    with st.expander("ℹ️ Informasi Model"):
+        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+        with col_info1:
+            st.metric("Model", model_info.get('model_name', 'N/A'))
+        with col_info2:
+            metrics = model_info.get('metrics', {})
+            st.metric("F1-Score", f"{metrics.get('f1_score', 0):.4f}")
+        with col_info3:
+            st.metric("Recall", f"{metrics.get('recall', 0):.4f}")
+        with col_info4:
+            st.metric("Accuracy", f"{metrics.get('accuracy', 0):.4f}")
+        
+        if class_weight_info:
+            st.info(f"🔧 Imbalance Handling: class_weight='{class_weight_info.get('method', 'balanced')}'")
+
+st.markdown("---")
 
 # Row 1: Data Info
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("Profil Pelanggan")
-    st.table(input_df.iloc[:, :7]) # Tampilkan sebagian data saja agar tidak penuh
+    st.subheader("👤 Profil Pelanggan")
+    
+    profile_data = {
+        "Atribut": ["Gender", "Senior Citizen", "Partner", "Dependents", "Tenure (bulan)", "Monthly Charges", "Total Charges"],
+        "Nilai": [
+            input_df['gender'].iloc[0],
+            "Ya" if input_df['SeniorCitizen'].iloc[0] == 1 else "Tidak",
+            input_df['Partner'].iloc[0],
+            input_df['Dependents'].iloc[0],
+            input_df['tenure'].iloc[0],
+            f"${input_df['MonthlyCharges'].iloc[0]:.2f}",
+            f"${input_df['TotalCharges'].iloc[0]:.2f}"
+        ]
+    }
+    st.table(pd.DataFrame(profile_data))
 
-    # --- PREPROCESSING INPUT ---
+with col2:
+    st.subheader("📋 Info Layanan")
+    services_data = {
+        "Layanan": ["Phone Service", "Internet Service", "Contract", "Payment Method"],
+        "Detail": [
+            input_df['PhoneService'].iloc[0],
+            input_df['InternetService'].iloc[0],
+            input_df['Contract'].iloc[0],
+            input_df['PaymentMethod'].iloc[0]
+        ]
+    }
+    st.table(pd.DataFrame(services_data))
+
+# --- PREPROCESSING & PREDICTION (SILENT - NO UI) ---
+try:
     df_ready = input_df.copy()
     
-    # Pastikan TotalCharges dalam format yang benar (float, bukan string)
-    # Konversi ke float jika belum
-    if df_ready['TotalCharges'].dtype == 'object':
-        df_ready['TotalCharges'] = pd.to_numeric(df_ready['TotalCharges'], errors='coerce').fillna(0)
-    
-    # Pastikan semua kolom numerik dalam format float
-    numeric_cols = ['tenure', 'MonthlyCharges', 'TotalCharges']
+    # Pastikan kolom numerik dalam format yang benar
+    numeric_cols = ['tenure', 'MonthlyCharges', 'TotalCharges', 'SeniorCitizen']
     for col in numeric_cols:
         if col in df_ready.columns:
-            df_ready[col] = df_ready[col].astype(float)
+            df_ready[col] = pd.to_numeric(df_ready[col], errors='coerce').fillna(0)
     
-    # 1. Label Encoding untuk kolom kategorikal
+    # Label Encoding (SILENT - tidak ada warning)
     for col, encoder in encoders.items():
         if col in df_ready.columns:
             try:
-                # Pastikan data dalam format string untuk encoding
-                df_ready[col] = df_ready[col].astype(str)
-                df_ready[col] = encoder.transform(df_ready[col])
-            except Exception as e:
-                st.warning(f"Warning saat encoding kolom {col}: {e}")
-                # Gunakan nilai default jika terjadi error
+                df_ready[col] = encoder.transform(df_ready[col].astype(str))
+            except ValueError:
+                # Jika value tidak dikenali, gunakan mode/default tanpa warning
                 df_ready[col] = 0
     
-    # 2. Scaling untuk kolom numerik
-    cols_to_scale = assets['cols_to_scale']
-    try:
-        df_ready[cols_to_scale] = scaler.transform(df_ready[cols_to_scale])
-    except Exception as e:
-        st.error(f"Error saat scaling: {e}")
-        st.stop()
+    # Scaling (jika ada scaler)
+    if scaler is not None:
+        cols_to_scale = assets.get('cols_to_scale', ['tenure', 'MonthlyCharges', 'TotalCharges'])
+        if cols_to_scale:
+            df_ready[cols_to_scale] = scaler.transform(df_ready[cols_to_scale])
     
-    # 3. Reorder Columns sesuai dengan feature_names dari model
+    # Reorder Columns
     df_ready = df_ready[feature_names]
 
-    # --- PREDICTION ---
-    try:
-        prediction = model.predict(df_ready)
-        prediction_proba = model.predict_proba(df_ready)
-
-        st.subheader("Hasil Prediksi")
-        if prediction[0] == 1:
-            st.error("🚨 HASIL: Pelanggan ini kemungkinan besar akan **CHURN** (Berhenti).")
+    # Prediction
+    prediction = model.predict(df_ready)[0]
+    prediction_proba = model.predict_proba(df_ready)[0]
+    
+    # --- HASIL PREDIKSI ---
+    st.markdown("---")
+    
+    result_col1, result_col2 = st.columns([2, 1])
+    
+    with result_col1:
+        st.subheader("🎯 Hasil Prediksi")
+        
+        # Determine prediction result
+        is_churn = (prediction == 1) or (prediction == 'Yes')
+        
+        if is_churn:
+            st.error("### 🚨 HASIL: Pelanggan ini kemungkinan besar akan **CHURN** (Berhenti)")
+            st.markdown("""
+            **Rekomendasi Tindakan:**
+            - 🎁 Tawarkan promo atau diskon khusus
+            - 📞 Hubungi pelanggan untuk feedback
+            - 🎯 Berikan loyalty reward
+            - 📧 Kirim retention campaign
+            """)
         else:
-            st.success("✅ HASIL: Pelanggan ini kemungkinan besar akan **RETAIN** (Tetap Langganan).")
-    except Exception as e:
-        st.error(f"Error saat melakukan prediksi: {e}")
-        st.stop()
-
-with col2:
-    st.subheader("Confidence Level")
-    prob_churn = prediction_proba[0][1] * 100
-    prob_retain = prediction_proba[0][0] * 100
+            st.success("### ✅ HASIL: Pelanggan ini kemungkinan besar akan **RETAIN** (Tetap Langganan)")
+            st.markdown("""
+            **Rekomendasi Tindakan:**
+            - ⭐ Pertahankan kualitas layanan
+            - 🚀 Tawarkan upgrade/cross-sell
+            - 💌 Kirim appreciation message
+            - 📊 Monitor perubahan behavior
+            """)
     
-    # Visualisasi Gauge sederhana atau Bar
-    st.metric("Probabilitas Churn", f"{prob_churn:.2f}%")
-    st.progress(int(prob_churn) / 100)
+    with result_col2:
+        st.subheader("📊 Confidence Level")
+        
+        # Handle probability
+        prob_churn = prediction_proba[1] * 100 if len(prediction_proba) > 1 else prediction_proba[0] * 100
+        prob_retain = prediction_proba[0] * 100 if len(prediction_proba) > 1 else (100 - prob_churn)
+        
+        st.metric("Probabilitas Churn", f"{prob_churn:.2f}%", delta=None)
+        st.progress(int(min(prob_churn, 100)) / 100)
+        
+        st.metric("Probabilitas Bertahan", f"{prob_retain:.2f}%", delta=None)
+        st.progress(int(min(prob_retain, 100)) / 100)
+        
+        # Risk Level
+        if prob_churn > 70:
+            st.error("🔴 Risk Level: TINGGI")
+        elif prob_churn > 50:
+            st.warning("🟡 Risk Level: SEDANG")
+        else:
+            st.success("🟢 Risk Level: RENDAH")
+
+    # --- DATA VISUALIZATION ---
+    st.divider()
+    st.subheader("💡 Analisis Fitur Input")
+
+    viz_col1, viz_col2, viz_col3 = st.columns(3)
+
+    with viz_col1:
+        # Grafik Monthly Charges
+        fig1, ax1 = plt.subplots(figsize=(6, 4))
+        categories = ['Input\nPelanggan', 'Rata-rata\nGlobal']
+        values = [input_df['MonthlyCharges'].iloc[0], 64.76]
+        colors = ['#e74c3c' if is_churn else '#2ecc71', '#3498db']
+        
+        bars = ax1.bar(categories, values, color=colors, edgecolor='black', linewidth=1.5)
+        ax1.set_ylabel("Monthly Charges ($)", fontsize=11, fontweight='bold')
+        ax1.set_title("Biaya Bulanan vs Rata-rata", fontsize=12, fontweight='bold')
+        ax1.set_ylim(0, max(values) * 1.2)
+        
+        for bar in bars:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'${height:.2f}',
+                    ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        plt.tight_layout()
+        st.pyplot(fig1)
+
+    with viz_col2:
+        st.markdown("**📋 Analisis Kontrak**")
+        contract_type = input_df['Contract'].iloc[0]
+        st.info(f"**Tipe Kontrak:** {contract_type}")
+        
+        if contract_type == "Month-to-month":
+            st.warning("⚠️ Kontrak Month-to-month memiliki risiko churn paling tinggi berdasarkan data historis.")
+        elif contract_type == "One year":
+            st.info("ℹ️ Kontrak 1 tahun memiliki risiko churn sedang.")
+        else:
+            st.success("✅ Kontrak 2 tahun memiliki risiko churn paling rendah!")
+
+    with viz_col3:
+        # Tenure Analysis
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        tenure_val = input_df['tenure'].iloc[0]
+        
+        if tenure_val < 12:
+            tenure_cat = "< 1 tahun"
+            risk = "Tinggi"
+            color = '#e74c3c'
+        elif tenure_val < 36:
+            tenure_cat = "1-3 tahun"
+            risk = "Sedang"
+            color = '#f39c12'
+        else:
+            tenure_cat = "> 3 tahun"
+            risk = "Rendah"
+            color = '#2ecc71'
+        
+        ax2.barh(['Tenure'], [tenure_val], color=color, edgecolor='black', linewidth=1.5)
+        ax2.set_xlabel("Bulan", fontsize=11, fontweight='bold')
+        ax2.set_title(f"Tenure: {tenure_val} bulan ({tenure_cat})", fontsize=12, fontweight='bold')
+        ax2.text(tenure_val/2, 0, f'{tenure_val} bulan', 
+                ha='center', va='center', fontsize=10, fontweight='bold', color='white')
+        
+        plt.tight_layout()
+        st.pyplot(fig2)
+        
+        st.info(f"**Risiko berdasarkan Tenure:** {risk}")
+
+    # Additional insights
+    st.divider()
+    st.subheader("📈 Insight Tambahan")
     
-    st.metric("Probabilitas Bertahan", f"{prob_retain:.2f}%")
-    st.progress(int(prob_retain) / 100)
-
-# --- REKOMENDASI TINDAKAN ---
-st.divider()
-st.subheader("💡 Rekomendasi Tindakan")
-
-if prediction[0] == 1:
-    st.markdown("### 🎯 Strategi Retensi yang Disarankan:")
+    insight_col1, insight_col2 = st.columns(2)
     
-    recommendations = []
+    with insight_col1:
+        st.markdown("**🔍 Faktor Risiko Terdeteksi:**")
+        risk_factors = []
+        
+        if input_df['Contract'].iloc[0] == "Month-to-month":
+            risk_factors.append("- Kontrak month-to-month")
+        if input_df['PaymentMethod'].iloc[0] == "Electronic check":
+            risk_factors.append("- Payment method: Electronic check")
+        if input_df['tenure'].iloc[0] < 12:
+            risk_factors.append("- Tenure kurang dari 1 tahun")
+        if input_df['MonthlyCharges'].iloc[0] > 80:
+            risk_factors.append("- Monthly charges tinggi (>$80)")
+        if input_df['InternetService'].iloc[0] == "Fiber optic":
+            risk_factors.append("- Internet service: Fiber optic (biaya tinggi)")
+        
+        if risk_factors:
+            for factor in risk_factors:
+                st.warning(factor)
+        else:
+            st.success("✅ Tidak ada faktor risiko mayor terdeteksi")
     
-    # Analisis berdasarkan kontrak
-    if input_df['Contract'][0] == "Month-to-month":
-        recommendations.append("🎁 Tawarkan promo atau diskon khusus untuk upgrade ke kontrak jangka panjang (1 atau 2 tahun)")
+    with insight_col2:
+        st.markdown("**💪 Faktor Protektif Terdeteksi:**")
+        protective_factors = []
+        
+        if input_df['Contract'].iloc[0] in ["One year", "Two year"]:
+            protective_factors.append("- Kontrak jangka panjang")
+        if input_df['tenure'].iloc[0] > 24:
+            protective_factors.append("- Tenure lebih dari 2 tahun")
+        if input_df['Partner'].iloc[0] == "Yes":
+            protective_factors.append("- Memiliki partner")
+        if input_df['Dependents'].iloc[0] == "Yes":
+            protective_factors.append("- Memiliki dependents")
+        if input_df['TechSupport'].iloc[0] == "Yes":
+            protective_factors.append("- Berlangganan Tech Support")
+        
+        if protective_factors:
+            for factor in protective_factors:
+                st.success(factor)
+        else:
+            st.info("ℹ️ Pertimbangkan untuk meningkatkan engagement pelanggan")
+
+except Exception as e:
+    st.error("❌ Terjadi error saat melakukan prediksi!")
+    st.error(f"**Error:** {str(e)}")
     
-    # Analisis berdasarkan biaya bulanan
-    if input_df['MonthlyCharges'][0] > 70:
-        recommendations.append("💰 Pertimbangkan untuk menawarkan paket bundling dengan harga lebih kompetitif")
-    
-    # Analisis berdasarkan layanan internet
-    if input_df['InternetService'][0] == "Fiber optic":
-        recommendations.append("🌐 Pastikan kualitas layanan Fiber optic optimal untuk mempertahankan pelanggan premium")
-    
-    # Analisis berdasarkan layanan tambahan
-    if input_df['TechSupport'][0] == "No":
-        recommendations.append("🛠️ Tawarkan trial gratis untuk Tech Support sebagai nilai tambah")
-    
-    if input_df['OnlineSecurity'][0] == "No":
-        recommendations.append("🔒 Berikan penawaran khusus untuk layanan Online Security")
-    
-    for rec in recommendations:
-        st.write(rec)
-else:
-    st.success("✅ Pelanggan ini memiliki risiko churn rendah. Pertahankan kualitas layanan yang baik!")
+    with st.expander("🐛 Debug Information"):
+        st.write("**Input DataFrame:**")
+        st.dataframe(input_df)
+        
+        st.write("**Expected Features:**")
+        st.write(feature_names)
+        
+        import traceback
+        st.code(traceback.format_exc())
 
-# --- DATA VISUALIZATION (PENDUKUNG) ---
-st.divider()
-st.subheader("📈 Analisis Fitur Input")
-
-viz_col1, viz_col2 = st.columns(2)
-
-with viz_col1:
-    # Grafik Monthly Charges
-    fig, ax = plt.subplots(figsize=(8, 5))
-    sns.barplot(x=['Input Pelanggan', 'Rata-rata Global'], 
-                y=[input_df['MonthlyCharges'][0], 64.7], palette='coolwarm', ax=ax)
-    ax.set_ylabel("Monthly Charges ($)", fontsize=12)
-    ax.set_title("Biaya Bulanan vs Rata-rata", fontsize=14, fontweight='bold')
-    st.pyplot(fig)
-
-with viz_col2:
-    # Grafik Tenure
-    fig2, ax2 = plt.subplots(figsize=(8, 5))
-    sns.barplot(x=['Input Pelanggan', 'Rata-rata Global'], 
-                y=[input_df['tenure'][0], 32], palette='viridis', ax=ax2)
-    ax2.set_ylabel("Tenure (Bulan)", fontsize=12)
-    ax2.set_title("Lama Berlangganan vs Rata-rata", fontsize=14, fontweight='bold')
-    st.pyplot(fig2)
-
-# --- INFO KONTRAK ---
-st.divider()
-st.subheader("📋 Informasi Detail")
-
-info_col1, info_col2, info_col3 = st.columns(3)
-
-with info_col1:
-    st.write(f"**Tipe Kontrak:** {input_df['Contract'][0]}")
-    if input_df['Contract'][0] == "Month-to-month":
-        st.warning("⚠️ Kontrak Month-to-month memiliki risiko churn paling tinggi berdasarkan data historis.")
-    else:
-        st.info("✅ Kontrak jangka panjang membantu mengurangi risiko churn.")
-
-with info_col2:
-    st.write(f"**Internet Service:** {input_df['InternetService'][0]}")
-    if input_df['InternetService'][0] == "Fiber optic":
-        st.info("🚀 Pelanggan Fiber optic cenderung menggunakan lebih banyak layanan.")
-    elif input_df['InternetService'][0] == "No":
-        st.warning("📵 Tidak menggunakan layanan internet.")
-
-with info_col3:
-    st.write(f"**Payment Method:** {input_df['PaymentMethod'][0]}")
-    if input_df['PaymentMethod'][0] == "Electronic check":
-        st.warning("⚠️ Electronic check memiliki korelasi lebih tinggi dengan churn.")
-    else:
-        st.success("✅ Metode pembayaran otomatis meningkatkan retensi.")
-
+# --- FOOTER ---
 st.markdown("---")
-st.caption("Developed by Muhammad Za'im Muzakki | NIM: A11.2022.14023")
+st.markdown("""
+<div style='text-align: center'>
+    <p><strong>Telco Customer Churn Predictor</strong></p>
+    <p>Developed by Muhammad Za'im Muzakki | NIM: A11.2022.14023</p>
+    <p>Model: class_weight='balanced' | Framework: Streamlit + Scikit-learn</p>
+</div>
+""", unsafe_allow_html=True)
